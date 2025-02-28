@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: airbnbDataHandler.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: airbnbDataHandler.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>// airbnbDataHandler.js
+import fs from 'fs/promises';
+import csv from 'csv-parser';
+import { createReadStream } from 'fs';
+import readline from 'readline';
+
+/**
+ * Loads and parses the CSV file.
+ * @param {string} filePath - Path to the CSV file.
+ * @returns {Promise&lt;Array&lt;Object>>} - Parsed data.
+ */
+const loadData = async (filePath) => {
+    return new Promise((resolve, reject) => {
+        const results = [];
+        createReadStream(filePath)
+            .pipe(csv())
+            .on('data', (data) => results.push(data))
+            .on('end', () => resolve(results))
+            .on('error', (error) => reject(error));
+    });
+};
+
+/**
+ * Filters listings by price range.
+ * @param {Array&lt;Object>} data - Listings data.
+ * @param {number} minPrice - Minimum price.
+ * @param {number} maxPrice - Maximum price.
+ * @returns {Array&lt;Object>} - Filtered data.
+ */
+const filterByPrice = (data, minPrice, maxPrice) => {
+    return data.filter(item => {
+        const price = parseFloat(item.price.replace('$', ''));
+        return price >= minPrice &amp;&amp; price &lt;= maxPrice;
+    });
+};
+
+/**
+ * Filters listings by number of rooms.
+ * @param {Array&lt;Object>} data - Listings data.
+ * @param {number} minRooms - Minimum number of rooms.
+ * @param {number} maxRooms - Maximum number of rooms.
+ * @returns {Array&lt;Object>} - Filtered data.
+ */
+const filterByRooms = (data, minRooms, maxRooms) => {
+    return data.filter(item => {
+        const rooms = parseInt(item.bedrooms);
+        return rooms >= minRooms &amp;&amp; rooms &lt;= maxRooms;
+    });
+};
+
+/**
+ * Filters listings by minimum rating.
+ * @param {Array&lt;Object>} data - Listings data.
+ * @param {number} minRating - Minimum rating.
+ * @returns {Array&lt;Object>} - Filtered data.
+ */
+const filterByRating = (data, minRating) => {
+    return data.filter(item => {
+        const rating = parseFloat(item.review_scores_rating);
+        return rating >= minRating;
+    });
+};
+
+/**
+ * Computes statistics for the listings.
+ * @param {Array&lt;Object>} data - Listings data.
+ * @returns {Object} - Object containing total listings, average price, and ranked hosts.
+ */
+const computeStats = (data) => {
+    const totalListings = data.length;
+    const averagePrice = data.reduce((sum, item) => {
+        return sum + parseFloat(item.price.replace('$', ''));
+    }, 0) / totalListings;
+
+    const hostListings = data.reduce((acc, item) => {
+        acc[item.host_id] = (acc[item.host_id] || 0) + 1;
+        return acc;
+    }, {});
+
+    const rankedHosts = Object.entries(hostListings)
+        .sort((a, b) => b[1] - a[1])
+        .map(([hostId, count]) => ({ hostId, count }));
+
+    return {
+        totalListings,
+        averagePrice,
+        rankedHosts
+    };
+};
+
+/**
+ * Exports the statistics to a file.
+ * @param {string} filePath - Path to the export file.
+ * @param {Object} stats - Statistics to export.
+ * @returns {Promise&lt;void>}
+ */
+const exportToFile = async (filePath, stats) => {
+    const content = `Total Listings: ${stats.totalListings}\nAverage Price: $${stats.averagePrice.toFixed(2)}\n\nRanked Hosts:\n${stats.rankedHosts.map(host => `Host ID: ${host.hostId}, Listings: ${host.count}`).join('\n')}`;
+    await fs.writeFile(filePath, content);
+};
+
+/**
+ * Main function to load data and handle user input.
+ */
+const main = async () => {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    rl.question('Enter the path to the CSV file: ', async (filePath) => {
+        try {
+            const data = await loadData(filePath);
+
+            rl.question('Enter minimum price: ', (minPrice) => {
+                rl.question('Enter maximum price: ', (maxPrice) => {
+                    rl.question('Enter minimum rooms: ', (minRooms) => {
+                        rl.question('Enter maximum rooms: ', (maxRooms) => {
+                            rl.question('Enter minimum rating: ', async (minRating) => {
+                                // Filter data
+                                const filteredData = filterByRating(
+                                    filterByRooms(
+                                        filterByPrice(data, parseFloat(minPrice), parseFloat(maxPrice)),
+                                        parseInt(minRooms),
+                                        parseInt(maxRooms)
+                                    ),
+                                    parseFloat(minRating)
+                                );
+
+                                // Compute statistics
+                                const stats = computeStats(filteredData);
+                                console.log('Total Listings:', stats.totalListings);
+                                console.log('Average Price:', stats.averagePrice.toFixed(2));
+                                console.log('Ranked Hosts:', stats.rankedHosts);
+
+                                // Export to file
+                                rl.question('Enter the export file path: ', async (exportPath) => {
+                                    await exportToFile(exportPath, stats);
+                                    console.log('Data exported successfully!');
+                                    rl.close();
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        } catch (error) {
+            console.error('Error loading data:', error);
+            rl.close();
+        }
+    });
+};
+
+// Start the main function
+main();</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#computeStats">computeStats</a></li><li><a href="global.html#exportToFile">exportToFile</a></li><li><a href="global.html#filterByPrice">filterByPrice</a></li><li><a href="global.html#filterByRating">filterByRating</a></li><li><a href="global.html#filterByRooms">filterByRooms</a></li><li><a href="global.html#loadData">loadData</a></li><li><a href="global.html#main">main</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Thu Feb 27 2025 17:25:20 GMT-0800 (GMT-08:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
